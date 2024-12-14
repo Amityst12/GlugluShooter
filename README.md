@@ -1,2 +1,2 @@
-# FirstPycharm
+# FirstPygame
  
