@@ -1,4 +1,5 @@
 import pygame
+import time
 from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, BACKGROUND_COLOR, FPS ,PLAYER_COLOR, SPEED
 
 # Base class for all game states
@@ -149,12 +150,12 @@ class OptionsState(GameState):
                 # Adjust volume only if the "Volume" option is selected
                 elif self.current_option == 0:
                     if event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_RIGHT, pygame.K_d):
-                        self.volume = min(100, self.volume + 10)
+                        self.volume = min(100, self.volume + 5)
                         pygame.mixer.music.set_volume(self.volume / 100)
                         print(f"Volume increased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
                         self.options[0] = f"Volume: {self.volume}%"
                     elif event.key in (pygame.K_MINUS, pygame.K_LEFT, pygame.K_a):
-                        self.volume = max(0, self.volume - 10)
+                        self.volume = max(0, self.volume - 5)
                         pygame.mixer.music.set_volume(self.volume / 100)
                         print(f"Volume decreased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
                         self.options[0] = f"Volume: {self.volume}%"
@@ -197,12 +198,19 @@ class GameManager:
         self.dt = 0
         
         # Initialize background music
-        pygame.mixer.init()
         try:
-            background_music = pygame.mixer.Sound("Assets/Music/pokemonBackgroundMusic.mp3")
-            background_music.play(loops =-1)
+            # Load and play background music
+            pygame.mixer.music.load("Assets/Music/pokemonBackgroundMusic.mp3")
+            pygame.mixer.music.play(loops=-1)
         except pygame.error as e:
             print(f"Error loading background music: {e}")
+
+        time.sleep(0.1)  # Small delay to ensure music has started
+
+        if not pygame.mixer.music.get_busy():
+            print("Music is not playing!")
+        else:
+            print("Music is playing correctly.")
             
         # Making starting fade
         self.fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
