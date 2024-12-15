@@ -151,10 +151,12 @@ class OptionsState(GameState):
                     if event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_RIGHT, pygame.K_d):
                         self.volume = min(100, self.volume + 10)
                         pygame.mixer.music.set_volume(self.volume / 100)
+                        print(f"Volume increased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
                         self.options[0] = f"Volume: {self.volume}%"
                     elif event.key in (pygame.K_MINUS, pygame.K_LEFT, pygame.K_a):
                         self.volume = max(0, self.volume - 10)
                         pygame.mixer.music.set_volume(self.volume / 100)
+                        print(f"Volume decreased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
                         self.options[0] = f"Volume: {self.volume}%"
 
     def select_option(self):
@@ -164,9 +166,12 @@ class OptionsState(GameState):
             if self.fullscreen:
                 pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
                 self.options[1] = "Fullscreen: ON"
+                print("Fullscreen: ON")
             else:
                 pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
                 self.options[1] = "Fullscreen: OFF"
+                print("Fullscreen: OFF")
+                
         elif self.current_option == 2:  # Back to menu
             self.manager.change_state("menu", fade_duration=0.5)
 
