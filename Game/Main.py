@@ -35,6 +35,9 @@ class GameplayState(GameState):
         #Sprites
         self.hero = pygame.image.load("Assets/Sprites/Hero.png")
         self.hero = pygame.transform.scale(self.hero, (90,90))
+        self.hero_right = pygame.transform.flip(self.hero,True,False)
+        self.facing_right = False
+        
         self.background = pygame.image.load("Assets/Sprites/UnderwaterBackground.png")
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
         
@@ -45,8 +48,8 @@ class GameplayState(GameState):
         if direction.length() > 0 :
             direction = direction.normalize()
         bullet = {
-            "pos": pygame.Vector2(self.player_pos.x + 45, self.player_pos.y + 45),  #Start at player position
-            "dir" : direction                        #Bullet direction
+            "pos": pygame.Vector2(self.player_pos.x+45, self.player_pos.y+45),  #Start at player position
+            "dir" : direction                                                   #Bullet direction
         }
         self.bullets.append(bullet)
 
@@ -70,22 +73,21 @@ class GameplayState(GameState):
             velocity.y += self.speed * dt
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:
             velocity.x -= self.speed * dt
+            self.facing_right = False
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
             velocity.x += self.speed * dt
-        
-        if keys[pygame.K_F1]:
-            self.player_pos = pygame.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
+            self.facing_right = True
 
         if velocity.length() > 0:
             velocity = velocity.normalize() * self.speed * dt
 
         self.player_pos += velocity
-        self.player_pos.x = max(self.player_radius, min(self.player_pos.x, SCREEN_WIDTH - self.player_radius))
-        self.player_pos.y = max(self.player_radius, min(self.player_pos.y, SCREEN_HEIGHT - self.player_radius))
+        self.player_pos.x = max(0, min(self.player_pos.x, SCREEN_WIDTH - self.player_radius))
+        self.player_pos.y = max(0, min(self.player_pos.y, SCREEN_HEIGHT - self.player_radius))
         
         # Update bullets
         for bullet in self.bullets[:]: 
-            bullet["pos"] += bullet["dir"] * 1200 * dt #Move bullet 500px/sec
+            bullet["pos"] += bullet["dir"] * 1000 * dt #Move bullet 1000px/sec
             
             if(bullet["pos"].x < 0 or bullet["pos"].x > SCREEN_WIDTH or #X
                bullet["pos"].y < 0 or bullet["pos"].y > SCREEN_HEIGHT   #Y
@@ -101,6 +103,17 @@ class GameplayState(GameState):
         text = font.render(f"Score: {int(self.score)}", True, "white")
         screen.blit(text, (SCREEN_WIDTH // 2.5, SCREEN_HEIGHT // 12.9))
         self.score += self.scoreClock.tick(FPS) / 300
+        
+        # Flip hero sprite
+        if self.facing_right == False:
+            self.hero_right.set_alpha(0)
+            self.hero.set_alpha(255)
+            screen.blit(self.hero, self.player_pos)
+        else:
+            self.hero_right.set_alpha(255)
+            self.hero.set_alpha(0)
+            screen.blit(self.hero_right, self.player_pos)
+            
         
         # Draw bullets
         for bullet in self.bullets:
