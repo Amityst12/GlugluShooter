@@ -33,7 +33,7 @@ class GameplayState(GameState):
         self.score = 0
         
         #Sprites
-        self.hero = pygame.image.load("Assets/Sprites/Hero.jpeg")
+        self.hero = pygame.image.load("Assets/Sprites/Hero.png")
         self.hero = pygame.transform.scale(self.hero, (90,90))
         self.background = pygame.image.load("Assets/Sprites/UnderwaterBackground.png")
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
