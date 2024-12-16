@@ -5,5 +5,6 @@ SCREEN_HEIGHT = 720
 PLAYER_RADIUS = 40
 PLAYER_COLOR = "black"
 BACKGROUND_COLOR = "pink"
+BACKGROUND_PICTURE = "/Assets/Sprites/UnderwaterBackground.png"
 SPEED = 300
 FPS = 144

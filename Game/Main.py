@@ -1,6 +1,6 @@
 import pygame
 import time
-from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, BACKGROUND_COLOR, FPS ,PLAYER_COLOR, SPEED
+from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED
 
 # Base class for all game states
 class GameState:
@@ -25,9 +25,30 @@ class GameplayState(GameState):
     def __init__(self, manager):
         super().__init__(manager)
         self.player_pos = pygame.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
-        self.player_radius = 40
-        self.player_color = PLAYER_COLOR
         self.speed = SPEED
+        self.player_radius = 90
+        self.bullets = []
+        
+        self.scoreClock = pygame.time.Clock()
+        self.score = 0
+        
+        #Sprites
+        self.hero = pygame.image.load("Assets/Sprites/Hero.jpeg")
+        self.hero = pygame.transform.scale(self.hero, (90,90))
+        self.background = pygame.image.load("Assets/Sprites/UnderwaterBackground.png")
+        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        
+    def shoot_bullet(self):
+        """shoots bullet toward the mouse cursor"""
+        mouse_pos = pygame.mouse.get_pos() #Get mouse position
+        direction = pygame.Vector2(mouse_pos[0]- self.player_pos.x ,mouse_pos[1]- self.player_pos.y)  # Calculate the direction from the player to the mouse
+        if direction.length() > 0 :
+            direction = direction.normalize()
+        bullet = {
+            "pos": pygame.Vector2(self.player_pos.x + 45, self.player_pos.y + 45),  #Start at player position
+            "dir" : direction                        #Bullet direction
+        }
+        self.bullets.append(bullet)
 
     def handle_events(self):
         """Handle gameplay-specific events."""
@@ -36,6 +57,8 @@ class GameplayState(GameState):
                 self.manager.running = False
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.manager.change_state("pause", 0.1)
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button ==1:
+                self.shoot_bullet()
 
     def update(self, dt):
         """Update gameplay logic."""
@@ -59,12 +82,30 @@ class GameplayState(GameState):
         self.player_pos += velocity
         self.player_pos.x = max(self.player_radius, min(self.player_pos.x, SCREEN_WIDTH - self.player_radius))
         self.player_pos.y = max(self.player_radius, min(self.player_pos.y, SCREEN_HEIGHT - self.player_radius))
+        
+        # Update bullets
+        for bullet in self.bullets[:]: 
+            bullet["pos"] += bullet["dir"] * 1200 * dt #Move bullet 500px/sec
+            
+            if(bullet["pos"].x < 0 or bullet["pos"].x > SCREEN_WIDTH or #X
+               bullet["pos"].y < 0 or bullet["pos"].y > SCREEN_HEIGHT   #Y
+               ): 
+                self.bullets.remove(bullet)
 
     def render(self, screen):
         """Render gameplay elements."""
-        screen.fill(BACKGROUND_COLOR)
-        pygame.draw.circle(screen, self.player_color, self.player_pos, self.player_radius)
-
+        screen.blit(self.background, (0, 0))
+        screen.blit(self.hero,(self.player_pos))
+        
+        font = pygame.font.Font(None, 74)
+        text = font.render(f"Score: {int(self.score)}", True, "white")
+        screen.blit(text, (SCREEN_WIDTH // 2.5, SCREEN_HEIGHT // 12.9))
+        self.score += self.scoreClock.tick(FPS) / 300
+        
+        # Draw bullets
+        for bullet in self.bullets:
+            pygame.draw.circle(screen, "yellow",bullet["pos"],8)
+        
 
 # Pause State
 class PauseState(GameState):
@@ -192,10 +233,10 @@ class GameManager:
         # Setting up pygame
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("State Management Example")
+        pygame.display.set_caption("GlugluShooter")
         self.clock = pygame.time.Clock()
         self.running = True
-        self.dt = 0
+        self.dt = 0 #Delta time - time not related to frames
         
         # Initialize background music
         try:
@@ -247,6 +288,9 @@ class GameManager:
             gameplay_state = self.states["gameplay"]
             gameplay_state.player_pos = pygame.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
         
+        if state_name == "gameplay":
+            self.states["gameplay"].score = 0
+            
         self.current_state = self.states[state_name]
 
     def run(self):
