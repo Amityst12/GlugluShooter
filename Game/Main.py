@@ -19,6 +19,30 @@ class GameState:
         """Render the state to the screen."""
         pass
 
+#Enemy class
+class Enemy:
+    def __init__(self, x, y, speed):
+        self.pos = pygame.Vector2(x,y)
+        self.speed = speed
+        self.radius= 40
+        self.color = "red"
+    
+    def collides_with(self, other_pos,other_radius):
+        """Check if this enemy collides with another circle."""
+        return self.pos.distance_to(other_pos) < self.radius +other_radius 
+    
+    def move_towards(self, target_pos, dt):
+        """Move the enemy towards the target position."""
+        newpos = pygame.Vector2(target_pos.x +40 , target_pos.y +40)
+        direction = newpos - self.pos
+        if direction.length() > 0:
+            direction = direction.normalize()
+        self.pos += direction * self.speed *dt
+        
+    def render(self, screen):
+        pygame.draw.circle(screen, self.color, (int(self.pos.x), int(self.pos.y)), self.radius)
+
+
 
 # Gameplay State
 class GameplayState(GameState):
@@ -26,11 +50,12 @@ class GameplayState(GameState):
         super().__init__(manager)
         self.player_pos = pygame.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
         self.speed = SPEED
-        self.player_radius = 90
+        self.player_radius = 45
         self.bullets = []
+        self.health = 3
         
-        self.scoreClock = pygame.time.Clock()
         self.score = 0
+        self.clockActive = False
         
         #Sprites
         self.hero = pygame.image.load("Assets/Sprites/Hero.png")
@@ -40,7 +65,24 @@ class GameplayState(GameState):
         
         self.background = pygame.image.load("Assets/Sprites/UnderwaterBackground.png")
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
-        
+
+        # Enemies
+        self.enemies = [Enemy(100, 100, 150), Enemy(500, 300, 100), Enemy(200, 300, 100), Enemy(500, 800, 100)]
+
+    def activate_clock(self):
+        self.clockActive = True
+    def deactivate_clock(self):
+        self.clockActive = False
+    def game_reset(self):
+        print("Game has been reset")
+        self.score = 0
+        self.health = 3
+        self.player_pos = pygame.Vector2(SCREEN_WIDTH/2 , SCREEN_HEIGHT/2)
+        self.enemies = [Enemy(100, 100, 150), Enemy(500, 300, 100), Enemy(200, 300, 100), Enemy(500, 800, 100)]
+        self.bullets = []
+    def get_score(self):
+        return self.score
+    
     def shoot_bullet(self):
         """shoots bullet toward the mouse cursor"""
         mouse_pos = pygame.mouse.get_pos() #Get mouse position
@@ -62,6 +104,11 @@ class GameplayState(GameState):
                 self.manager.change_state("pause", 0.1)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button ==1:
                 self.shoot_bullet()
+        
+        # Checking if player lost
+        if self.health == 0:
+            print("Game over")
+            self.manager.change_state("over", 1.5)
 
     def update(self, dt):
         """Update gameplay logic."""
@@ -82,10 +129,15 @@ class GameplayState(GameState):
             velocity = velocity.normalize() * self.speed * dt
 
         self.player_pos += velocity
-        self.player_pos.x = max(0, min(self.player_pos.x, SCREEN_WIDTH - self.player_radius))
-        self.player_pos.y = max(0, min(self.player_pos.y, SCREEN_HEIGHT - self.player_radius))
+        self.player_pos.x = max(0, min(self.player_pos.x, SCREEN_WIDTH - 90))
+        self.player_pos.y = max(0, min(self.player_pos.y, SCREEN_HEIGHT - 90))
         
-        # Update bullets
+        
+        # Updating score ON TIME
+        if self.clockActive:
+            self.score += dt*4
+            
+        # Update bullets, update score on hit
         for bullet in self.bullets[:]: 
             bullet["pos"] += bullet["dir"] * 1000 * dt #Move bullet 1000px/sec
             
@@ -93,16 +145,31 @@ class GameplayState(GameState):
                bullet["pos"].y < 0 or bullet["pos"].y > SCREEN_HEIGHT   #Y
                ): 
                 self.bullets.remove(bullet)
+            for enemy in self.enemies[:]:
+                if enemy.collides_with(bullet["pos"],8):
+                    print("Bullet hit an enemy!")
+                    self.score += self.score*0.08
+                    self.enemies.remove(enemy)
+                    self.bullets.remove(bullet)
+                    break
+                
+        # Move enemies
+        for enemy in self.enemies:
+            enemy.move_towards(self.player_pos, dt)
+            if enemy.collides_with((self.player_pos.x+40,self.player_pos.y+40), self.player_radius):
+                print(f"Enemy hit the player HP: {self.health -1}")
+                self.health -=1
+                self.enemies.remove(enemy)
 
     def render(self, screen):
         """Render gameplay elements."""
         screen.blit(self.background, (0, 0))
         screen.blit(self.hero,(self.player_pos))
         
+        # Display score
         font = pygame.font.Font(None, 74)
         text = font.render(f"Score: {int(self.score)}", True, "white")
         screen.blit(text, (SCREEN_WIDTH // 2.5, SCREEN_HEIGHT // 12.9))
-        self.score += self.scoreClock.tick(FPS) / 300
         
         # Flip hero sprite
         if self.facing_right == False:
@@ -113,11 +180,45 @@ class GameplayState(GameState):
             self.hero_right.set_alpha(255)
             self.hero.set_alpha(0)
             screen.blit(self.hero_right, self.player_pos)
+        
+        #Display HP
+        health_text = font.render(f"Health: {self.health}", True,"red")
+        screen.blit(health_text, (20,20))
             
+        # Draw enemies
+        for enemy in self.enemies:
+            enemy.render(screen)
         
         # Draw bullets
         for bullet in self.bullets:
             pygame.draw.circle(screen, "yellow",bullet["pos"],8)
+
+
+# Game over State        
+class GameoverState(GameState):
+    def __init__(self, manager):
+        super().__init__(manager)
+        self.finalScore =0
+        pass
+    def handle_events(self):
+        """Handle gameplay-specific events."""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.manager.running = False
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_b:
+                self.manager.change_state("menu")
+    
+    def render(self, screen):
+        """Render pause screen."""
+        screen.fill("gray")
+        font = pygame.font.Font(None, 150)
+        text = font.render("Game over!", True, "black")
+        screen.blit(text, (SCREEN_WIDTH // 3.5, SCREEN_HEIGHT // 5))
+        text = font.render(f"Your score is:{self.finalScore}",True, "black")
+        screen.blit(text, (SCREEN_WIDTH // 4.8, SCREEN_HEIGHT // 3.2))
+        font = pygame.font.Font(None, 70)
+        text = font.render("Press B to go back to menu", True ,"white")
+        screen.blit(text, (SCREEN_WIDTH // 4, SCREEN_HEIGHT // 1.2))
         
 
 # Pause State
@@ -276,7 +377,8 @@ class GameManager:
             "gameplay": GameplayState(self),
             "pause": PauseState(self),
             "menu" : MenuState(self),
-            "options" : OptionsState(self)
+            "options" : OptionsState(self),
+            "over" : GameoverState(self)
         }
         
         self.current_state = self.states["menu"]
@@ -301,9 +403,19 @@ class GameManager:
             gameplay_state = self.states["gameplay"]
             gameplay_state.player_pos = pygame.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
         
+        print(f"| From-{type(self.current_state).__name__} Jumped to-{state_name}  |")
+        
         if state_name == "gameplay":
-            self.states["gameplay"].score = 0
+            if isinstance(self.current_state, MenuState):
+                self.states["gameplay"].game_reset()
+            self.states["gameplay"].activate_clock()
+        else:
+            self.states["gameplay"].deactivate_clock()
             
+        if state_name == "over":
+            if isinstance(self.current_state, GameplayState):
+                self.states["over"].finalScore = int(self.states["gameplay"].get_score())
+        
         self.current_state = self.states[state_name]
 
     def run(self):
