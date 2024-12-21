@@ -400,9 +400,9 @@ class GameManager:
             # Load and play background music
             pygame.mixer.music.load("Assets/Music/pokemonBackgroundMusic.mp3")
             pygame.mixer.music.play(loops=-1)
+            pygame.mixer.music.set_volume(DEFAULTVOLUME/100)
         except pygame.error as e:
             print(f"Error loading background music: {e}")
-
         time.sleep(0.1)  # Small delay to ensure music has started
 
         if not pygame.mixer.music.get_busy():
