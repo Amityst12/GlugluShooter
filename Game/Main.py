@@ -1,6 +1,10 @@
 import pygame
 import time
-from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED
+import random
+import os
+from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED, SPAWNRATE, HEALTH, DEFAULTVOLUME
+
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1" 
 
 # Base class for all game states
 class GameState:
@@ -52,7 +56,7 @@ class GameplayState(GameState):
         self.speed = SPEED
         self.player_radius = 45
         self.bullets = []
-        self.health = 3
+        self.health = HEALTH
         
         self.score = 0
         self.clockActive = False
@@ -62,12 +66,25 @@ class GameplayState(GameState):
         self.hero = pygame.transform.scale(self.hero, (90,90))
         self.hero_right = pygame.transform.flip(self.hero,True,False)
         self.facing_right = False
+        self.bubble = pygame.image.load("Assets/Sprites/Bubble.png")
+        self.bubble = pygame.transform.scale(self.bubble, (30,30))
         
         self.background = pygame.image.load("Assets/Sprites/UnderwaterBackground.png")
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
         # Enemies
-        self.enemies = [Enemy(100, 100, 150), Enemy(500, 300, 100), Enemy(200, 300, 100), Enemy(500, 800, 100)]
+        self.enemies = []
+        self.spawn_rate = SPAWNRATE
+        self.spawn_timer = 0
+        
+        # Glu sounds
+        self.glues = {
+            1 : "Assets/Music/Glu1.ogg",
+            2 : "Assets/Music/Glu2.ogg",
+            3 : "Assets/Music/Glu3.ogg",
+            4 : "Assets/Music/Glu4.ogg",
+            5 : "Assets/Music/Glu4.ogg"
+        }
 
     def activate_clock(self):
         self.clockActive = True
@@ -76,23 +93,31 @@ class GameplayState(GameState):
     def game_reset(self):
         print("Game has been reset")
         self.score = 0
-        self.health = 3
+        self.health = HEALTH
         self.player_pos = pygame.Vector2(SCREEN_WIDTH/2 , SCREEN_HEIGHT/2)
-        self.enemies = [Enemy(100, 100, 150), Enemy(500, 300, 100), Enemy(200, 300, 100), Enemy(500, 800, 100)]
+        self.enemies = []
         self.bullets = []
+        self.spawn_rate = SPAWNRATE
+        self.spawn_timer = 0
     def get_score(self):
         return self.score
-    
+               
     def shoot_bullet(self):
         """shoots bullet toward the mouse cursor"""
+        player_center = pygame.Vector2(
+        self.player_pos.x + self.player_radius,
+        self.player_pos.y + self.player_radius)
         mouse_pos = pygame.mouse.get_pos() #Get mouse position
-        direction = pygame.Vector2(mouse_pos[0]- self.player_pos.x ,mouse_pos[1]- self.player_pos.y)  # Calculate the direction from the player to the mouse
+        direction = pygame.Vector2(mouse_pos[0] - player_center.x, mouse_pos[1] - player_center.y)  # Calculate the direction from the player to the mouse
         if direction.length() > 0 :
             direction = direction.normalize()
         bullet = {
             "pos": pygame.Vector2(self.player_pos.x+45, self.player_pos.y+45),  #Start at player position
             "dir" : direction                                                   #Bullet direction
         }
+        sound = pygame.mixer.Sound(self.glues[random.randint(1,5)])
+        sound.set_volume(0.20)
+        sound.play()
         self.bullets.append(bullet)
 
     def handle_events(self):
@@ -139,24 +164,42 @@ class GameplayState(GameState):
             
         # Update bullets, update score on hit
         for bullet in self.bullets[:]: 
-            bullet["pos"] += bullet["dir"] * 1000 * dt #Move bullet 1000px/sec
+            bullet["pos"] += bullet["dir"] * 1200 * dt #Move bullet 1200px/sec
             
             if(bullet["pos"].x < 0 or bullet["pos"].x > SCREEN_WIDTH or #X
                bullet["pos"].y < 0 or bullet["pos"].y > SCREEN_HEIGHT   #Y
                ): 
                 self.bullets.remove(bullet)
             for enemy in self.enemies[:]:
-                if enemy.collides_with(bullet["pos"],8):
+                if enemy.collides_with(bullet["pos"],25):
                     print("Bullet hit an enemy!")
-                    self.score += self.score*0.08
+                    self.score += random.randint(4,20)
                     self.enemies.remove(enemy)
                     self.bullets.remove(bullet)
                     break
+            
+        
+        # Spawn enemies
+        self.spawn_rate = max(500, 2000 - int(self.score // 10) * 100)
+        self.spawn_timer += dt * 1000
+        if self.spawn_timer >= self.spawn_rate:
+            self.spawn_timer -= self.spawn_rate
+            if random.randint(0,1) == 0:  # X
+                x = random.randint(0,1) * SCREEN_WIDTH
+                y= random.randint(0,SCREEN_HEIGHT)
+            else:                         # Y
+                x = random.randint(0, SCREEN_WIDTH)
+                y= random.randint(0,1) * SCREEN_HEIGHT
+                
+            speed = random.randint(120, 170) + int(self.score // 50)
+            self.enemies.append(Enemy(x,y,speed))
+            print(f"Enemy spawned at {x} , {y} , speed: {speed}")
+            
                 
         # Move enemies
         for enemy in self.enemies:
             enemy.move_towards(self.player_pos, dt)
-            if enemy.collides_with((self.player_pos.x+40,self.player_pos.y+40), self.player_radius):
+            if enemy.collides_with((self.player_pos.x+40,self.player_pos.y+40), self.player_radius -5):
                 print(f"Enemy hit the player HP: {self.health -1}")
                 self.health -=1
                 self.enemies.remove(enemy)
@@ -191,7 +234,7 @@ class GameplayState(GameState):
         
         # Draw bullets
         for bullet in self.bullets:
-            pygame.draw.circle(screen, "yellow",bullet["pos"],8)
+            screen.blit(self.bubble , bullet["pos"])
 
 
 # Game over State        
@@ -199,7 +242,7 @@ class GameoverState(GameState):
     def __init__(self, manager):
         super().__init__(manager)
         self.finalScore =0
-        pass
+        
     def handle_events(self):
         """Handle gameplay-specific events."""
         for event in pygame.event.get():
@@ -280,9 +323,9 @@ class MenuState(GameState):
 class OptionsState(GameState):
     def __init__(self, manager):
         super().__init__(manager)
-        self.options = ["Volume: 100%", "Fullscreen: OFF", "Back to Menu"]
+        self.options = [f"Music: {DEFAULTVOLUME}%", "Fullscreen: OFF", "Back to Menu"]
         self.current_option = 0
-        self.volume = 100  # Starting volume
+        self.volume = DEFAULTVOLUME  # Starting volume
         self.fullscreen = False
 
     def handle_events(self):
@@ -308,12 +351,12 @@ class OptionsState(GameState):
                         self.volume = min(100, self.volume + 5)
                         pygame.mixer.music.set_volume(self.volume / 100)
                         print(f"Volume increased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
-                        self.options[0] = f"Volume: {self.volume}%"
+                        self.options[0] = f"Music: {self.volume}%"
                     elif event.key in (pygame.K_MINUS, pygame.K_LEFT, pygame.K_a):
                         self.volume = max(0, self.volume - 5)
                         pygame.mixer.music.set_volume(self.volume / 100)
                         print(f"Volume decreased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
-                        self.options[0] = f"Volume: {self.volume}%"
+                        self.options[0] = f"Music: {self.volume}%"
 
     def select_option(self):
         """Execute the selected option."""
@@ -432,3 +475,4 @@ class GameManager:
 if __name__ == "__main__":
     game = GameManager()
     game.run()
+    
