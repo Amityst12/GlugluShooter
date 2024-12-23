@@ -10,12 +10,11 @@ def load_frames(spritesheet, frame_width, frame_height, num_frames, rows=1):
         """Load animation frames from a sprite sheet."""
         frames = []
         
-        for row in range(rows):
-            for i in range(num_frames):
-                x = i * frame_width
-                y = row * frame_height
-                frame = spritesheet.subsurface((x, y, frame_width, frame_height))
-                frames.append(frame)
+        for i in range(num_frames):
+            x = i * frame_width
+            y =frame_height
+            frame = spritesheet.subsurface((x, y, frame_width, frame_height))
+            frames.append(frame)
         return frames
 
 # Base class for all game states
@@ -43,7 +42,7 @@ class Enemy:
         self.speed = speed
         self.frames = frames
         self.current_frame = 0
-        self.animation_speed = 1  # Adjust to control animation speed
+        self.animation_speed = 0.13  # Adjust to control animation speed
         self.animation_timer = 0
         self.pos = pygame.Vector2(x,y)
         self.image_width = 124  # Match your frame width
@@ -56,7 +55,7 @@ class Enemy:
         self.animation_timer += dt
         if self.animation_timer >= self.animation_speed:
             self.animation_timer = 0
-            self.current_frame = (self.current_frame + 1) % len(self.frames)    
+            self.current_frame = (self.current_frame + 1) % len(self.frames)
 
     def collides_with(self, bullet_pos, bullet_radius=5):
         """Check if a bullet collides with the enemy using circular hit detection."""
@@ -80,13 +79,13 @@ class Enemy:
         """Draw the enemy."""
         current_image = self.frames[self.current_frame]
         screen.blit(current_image, (self.pos.x, self.pos.y))
-        pygame.draw.circle(
+        """pygame.draw.circle(
             screen,  # Surface to draw on
             "red",   # Hitbox color (use transparent color if distracting)
             (int(self.pos.x + self.image_width / 2), int(self.pos.y + self.image_height / 2)),  # Center of the circle
             self.radius,  # Radius of the hitbox
             2  # Line width (set to 0 for filled circle if needed)
-        )
+        )""" #debug
 
 
 # Gameplay State
@@ -117,6 +116,7 @@ class GameplayState(GameState):
         self.enemies = []
         self.spawn_rate = SPAWNRATE
         self.spawn_timer = 0
+            
         
         # Glu sounds
         self.glues = {
@@ -128,10 +128,10 @@ class GameplayState(GameState):
         }
         
         self.shark_spritesheet = pygame.image.load('assets/sprites/shark1.png').convert_alpha()
-        self.shark_frames = load_frames(self.shark_spritesheet, frame_width=124, frame_height=128 , num_frames=6)
+        self.shark_frames = load_frames(self.shark_spritesheet, frame_width=136, frame_height=128 , num_frames=4)
         
         self.shark_spritesheet = pygame.image.load('assets/sprites/shark2.png').convert_alpha()
-        self.shark_frames2 = load_frames(self.shark_spritesheet, frame_width=124, frame_height=128 , num_frames=6)
+        self.shark_frames2 = load_frames(self.shark_spritesheet, frame_width=152, frame_height=128 , num_frames=4)
 
     def activate_clock(self):
         self.clockActive = True
@@ -146,6 +146,7 @@ class GameplayState(GameState):
         self.bullets = []
         self.spawn_rate = SPAWNRATE
         self.spawn_timer = 0
+        
     def get_score(self):
         return self.score
                
@@ -241,13 +242,15 @@ class GameplayState(GameState):
             speed = random.randint(120, 170) + int(self.score // 35)
             if random.randint(0,1):
                 self.enemies.append(Enemy(x, y, speed, self.shark_frames2))
-            else: self.enemies.append(Enemy(x, y, speed, self.shark_frames))
+            else: 
+                self.enemies.append(Enemy(x, y, speed, self.shark_frames))
             print(f"Enemy spawned at {x} , {y} , speed: {speed}")
             
                 
         # Move enemies
         for enemy in self.enemies:
             enemy.move_towards(self.player_pos, dt)
+            enemy.update(dt)
             if enemy.collides_with((self.player_pos.x+40,self.player_pos.y+40), self.player_radius -5):
                 print(f"Enemy hit the player HP: {self.health -1}")
                 self.health -=1
