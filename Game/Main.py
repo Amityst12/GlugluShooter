@@ -6,6 +6,18 @@ from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED, SPAWNRATE, HEAL
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1" 
 
+def load_frames(spritesheet, frame_width, frame_height, num_frames, rows=1):
+        """Load animation frames from a sprite sheet."""
+        frames = []
+        
+        for row in range(rows):
+            for i in range(num_frames):
+                x = i * frame_width
+                y = row * frame_height
+                frame = spritesheet.subsurface((x, y, frame_width, frame_height))
+                frames.append(frame)
+        return frames
+
 # Base class for all game states
 class GameState:
     def __init__(self, manager):
@@ -25,27 +37,56 @@ class GameState:
 
 #Enemy class
 class Enemy:
-    def __init__(self, x, y, speed):
-        self.pos = pygame.Vector2(x,y)
+    def __init__(self, x, y, speed, frames):
+        self.x = x
+        self.y = y
         self.speed = speed
-        self.radius= 40
-        self.color = "red"
-    
-    def collides_with(self, other_pos,other_radius):
-        """Check if this enemy collides with another circle."""
-        return self.pos.distance_to(other_pos) < self.radius +other_radius 
+        self.frames = frames
+        self.current_frame = 0
+        self.animation_speed = 1  # Adjust to control animation speed
+        self.animation_timer = 0
+        self.pos = pygame.Vector2(x,y)
+        self.image_width = 124  # Match your frame width
+        self.image_height = 128
+        self.radius = self.image_height // 2
+
+    def update(self, dt):
+        """Update enemy logic, including animation."""
+        # Update animation
+        self.animation_timer += dt
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.current_frame = (self.current_frame + 1) % len(self.frames)    
+
+    def collides_with(self, bullet_pos, bullet_radius=5):
+        """Check if a bullet collides with the enemy using circular hit detection."""
+        # Center of the collision circle
+        center = pygame.Vector2(
+            self.pos.x + self.image_width / 2,
+            self.pos.y + self.image_height / 2
+        )
+        # Distance between bullet and enemy center
+        distance = center.distance_to(bullet_pos)
+        return distance < self.radius + bullet_radius
     
     def move_towards(self, target_pos, dt):
         """Move the enemy towards the target position."""
-        newpos = pygame.Vector2(target_pos.x +40 , target_pos.y +40)
-        direction = newpos - self.pos
+        direction = target_pos - self.pos
         if direction.length() > 0:
             direction = direction.normalize()
-        self.pos += direction * self.speed *dt
+        self.pos += direction * self.speed * dt
         
     def render(self, screen):
-        pygame.draw.circle(screen, self.color, (int(self.pos.x), int(self.pos.y)), self.radius)
-
+        """Draw the enemy."""
+        current_image = self.frames[self.current_frame]
+        screen.blit(current_image, (self.pos.x, self.pos.y))
+        pygame.draw.circle(
+            screen,  # Surface to draw on
+            "red",   # Hitbox color (use transparent color if distracting)
+            (int(self.pos.x + self.image_width / 2), int(self.pos.y + self.image_height / 2)),  # Center of the circle
+            self.radius,  # Radius of the hitbox
+            2  # Line width (set to 0 for filled circle if needed)
+        )
 
 
 # Gameplay State
@@ -85,6 +126,12 @@ class GameplayState(GameState):
             4 : "Assets/Music/Glu4.ogg",
             5 : "Assets/Music/Glu4.ogg"
         }
+        
+        self.shark_spritesheet = pygame.image.load('assets/sprites/shark1.png').convert_alpha()
+        self.shark_frames = load_frames(self.shark_spritesheet, frame_width=124, frame_height=128 , num_frames=6)
+        
+        self.shark_spritesheet = pygame.image.load('assets/sprites/shark2.png').convert_alpha()
+        self.shark_frames2 = load_frames(self.shark_spritesheet, frame_width=124, frame_height=128 , num_frames=6)
 
     def activate_clock(self):
         self.clockActive = True
@@ -173,14 +220,14 @@ class GameplayState(GameState):
             for enemy in self.enemies[:]:
                 if enemy.collides_with(bullet["pos"],25):
                     print("Bullet hit an enemy!")
-                    self.score += random.randint(4,20)
+                    self.score += random.randint(6,23)
                     self.enemies.remove(enemy)
                     self.bullets.remove(bullet)
                     break
             
         
         # Spawn enemies
-        self.spawn_rate = max(500, 2000 - int(self.score // 10) * 100)
+        self.spawn_rate = max(270, 2000 - int(self.score // 10) * 15)
         self.spawn_timer += dt * 1000
         if self.spawn_timer >= self.spawn_rate:
             self.spawn_timer -= self.spawn_rate
@@ -191,8 +238,10 @@ class GameplayState(GameState):
                 x = random.randint(0, SCREEN_WIDTH)
                 y= random.randint(0,1) * SCREEN_HEIGHT
                 
-            speed = random.randint(120, 170) + int(self.score // 50)
-            self.enemies.append(Enemy(x,y,speed))
+            speed = random.randint(120, 170) + int(self.score // 35)
+            if random.randint(0,1):
+                self.enemies.append(Enemy(x, y, speed, self.shark_frames2))
+            else: self.enemies.append(Enemy(x, y, speed, self.shark_frames))
             print(f"Enemy spawned at {x} , {y} , speed: {speed}")
             
                 
@@ -436,7 +485,6 @@ class GameManager:
             self.current_state.render(self.screen)
             self.screen.blit(self.fade_surface, (0,0)) #Fade overlay
             pygame.display.flip()
-
 
     def change_state(self, state_name, fade_duration =0.7):
         """Switch to a different game state."""
