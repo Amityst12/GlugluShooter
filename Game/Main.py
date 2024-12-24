@@ -2,20 +2,39 @@ import pygame
 import time
 import random
 import os
-from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED, SPAWNRATE, HEALTH, DEFAULTVOLUME
+import json
+from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED, SPAWNRATE, HEALTH
 
+# Open JSON
+with open("Game/Changes.json") as file:
+    config = json.load(file)
+    DEFAULTVOLUME = config["Volume"]
+    HIGHSCORE = config["HIGHSCORE"]
+
+print(config)
+    
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1" 
 
-def load_frames(spritesheet, frame_width, frame_height, num_frames, rows=1):
+# Makes animation
+def load_frames(spritesheet, frame_width, frame_height, num_frames, flip =0):
         """Load animation frames from a sprite sheet."""
         frames = []
-        
+
         for i in range(num_frames):
             x = i * frame_width
             y =frame_height
             frame = spritesheet.subsurface((x, y, frame_width, frame_height))
+            if flip == 1:
+                frame = pygame.transform.flip(frame,True,False)
             frames.append(frame)
         return frames
+    
+# Write to json file
+def write_to_JSON(Catagory, Value):
+    config[Catagory] = Value
+    out_file = open("Game/Changes.json",'w')
+    json.dump(config, out_file, indent= 6)
+    print(f"New json: {config}")
 
 # Base class for all game states
 class GameState:
@@ -88,6 +107,8 @@ class Enemy:
         )""" #debug
 
 
+
+
 # Gameplay State
 class GameplayState(GameState):
     def __init__(self, manager):
@@ -116,7 +137,16 @@ class GameplayState(GameState):
         self.enemies = []
         self.spawn_rate = SPAWNRATE
         self.spawn_timer = 0
-            
+        self.flip = 0
+        
+        self.shark_spritesheet = pygame.image.load('assets/sprites/shark1.png').convert_alpha()
+        self.shark_frames = load_frames(self.shark_spritesheet, frame_width=136, frame_height=128 , num_frames=4)
+        self.shark_frames_rev = load_frames(self.shark_spritesheet, frame_width=136, frame_height=128 , num_frames=4, flip = 1)
+        
+        self.shark_spritesheet = pygame.image.load('assets/sprites/shark2.png').convert_alpha()
+        self.shark_frames2 = load_frames(self.shark_spritesheet, frame_width=152, frame_height=128 , num_frames=4)
+        self.shark_frames2_rev = load_frames(self.shark_spritesheet, frame_width=152, frame_height=128 , num_frames=4, flip = 1)
+        
         
         # Glu sounds
         self.glues = {
@@ -127,11 +157,6 @@ class GameplayState(GameState):
             5 : "Assets/Music/Glu4.ogg"
         }
         
-        self.shark_spritesheet = pygame.image.load('assets/sprites/shark1.png').convert_alpha()
-        self.shark_frames = load_frames(self.shark_spritesheet, frame_width=136, frame_height=128 , num_frames=4)
-        
-        self.shark_spritesheet = pygame.image.load('assets/sprites/shark2.png').convert_alpha()
-        self.shark_frames2 = load_frames(self.shark_spritesheet, frame_width=152, frame_height=128 , num_frames=4)
 
     def activate_clock(self):
         self.clockActive = True
@@ -213,13 +238,15 @@ class GameplayState(GameState):
         # Update bullets, update score on hit
         for bullet in self.bullets[:]: 
             bullet["pos"] += bullet["dir"] * 1200 * dt #Move bullet 1200px/sec
+            rem = 0
             
             if(bullet["pos"].x < 0 or bullet["pos"].x > SCREEN_WIDTH or #X
                bullet["pos"].y < 0 or bullet["pos"].y > SCREEN_HEIGHT   #Y
                ): 
                 self.bullets.remove(bullet)
+                rem = 1
             for enemy in self.enemies[:]:
-                if enemy.collides_with(bullet["pos"],25):
+                if enemy.collides_with(bullet["pos"],25) and rem == 0:
                     print("Bullet hit an enemy!")
                     self.score += random.randint(6,23)
                     self.enemies.remove(enemy)
@@ -235,15 +262,25 @@ class GameplayState(GameState):
             if random.randint(0,1) == 0:  # X
                 x = random.randint(0,1) * SCREEN_WIDTH
                 y= random.randint(0,SCREEN_HEIGHT)
+                if x == 0: 
+                    self.flip = 1
+                else: self.flip = 0
             else:                         # Y
                 x = random.randint(0, SCREEN_WIDTH)
                 y= random.randint(0,1) * SCREEN_HEIGHT
+                if(x > SCREEN_WIDTH/2):
+                    self.flip = 0
+                else: self.flip = 1 
                 
             speed = random.randint(120, 170) + int(self.score // 35)
             if random.randint(0,1):
-                self.enemies.append(Enemy(x, y, speed, self.shark_frames2))
+                if self.flip == 0: self.enemies.append(Enemy(x, y, speed, self.shark_frames2))
+                else :
+                    self.enemies.append(Enemy(x, y, speed, self.shark_frames2_rev))
             else: 
-                self.enemies.append(Enemy(x, y, speed, self.shark_frames))
+                if self.flip == 0: self.enemies.append(Enemy(x, y, speed, self.shark_frames))
+                else :
+                    self.enemies.append(Enemy(x, y, speed, self.shark_frames_rev))
             print(f"Enemy spawned at {x} , {y} , speed: {speed}")
             
                 
@@ -307,10 +344,18 @@ class GameoverState(GameState):
         """Render pause screen."""
         screen.fill("gray")
         font = pygame.font.Font(None, 150)
+        HIGHSCORE = config["HIGHSCORE"]
+        if (HIGHSCORE < self.finalScore): 
+            write_to_JSON("HIGHSCORE", self.finalScore)
+        if (HIGHSCORE <= self.finalScore):
+            text = font.render("NEW HIGH SCORE!!",True,"red")
+            screen.blit(text, (SCREEN_WIDTH // 6.7, SCREEN_HEIGHT // 40))
         text = font.render("Game over!", True, "black")
-        screen.blit(text, (SCREEN_WIDTH // 3.5, SCREEN_HEIGHT // 5))
-        text = font.render(f"Your score is:{self.finalScore}",True, "black")
+        screen.blit(text, (SCREEN_WIDTH // 3.5, SCREEN_HEIGHT // 5.7))
+        text = font.render(f"Your score: {self.finalScore}",True, "black")
         screen.blit(text, (SCREEN_WIDTH // 4.8, SCREEN_HEIGHT // 3.2))
+        text = font.render(f"Highscore: {HIGHSCORE}",True,"black")
+        screen.blit(text, (SCREEN_WIDTH // 4.8, SCREEN_HEIGHT // 2))
         font = pygame.font.Font(None, 70)
         text = font.render("Press B to go back to menu", True ,"white")
         screen.blit(text, (SCREEN_WIDTH // 4, SCREEN_HEIGHT // 1.2))
@@ -402,13 +447,18 @@ class OptionsState(GameState):
                     if event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_RIGHT, pygame.K_d):
                         self.volume = min(100, self.volume + 5)
                         pygame.mixer.music.set_volume(self.volume / 100)
-                        print(f"Volume increased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
+                        print(f"Volume increased: {self.volume}%")
                         self.options[0] = f"Music: {self.volume}%"
+                        write_to_JSON("Volume", self.volume)
+                        DEFAULTVOLUME = self.volume
                     elif event.key in (pygame.K_MINUS, pygame.K_LEFT, pygame.K_a):
                         self.volume = max(0, self.volume - 5)
                         pygame.mixer.music.set_volume(self.volume / 100)
-                        print(f"Volume decreased: {self.volume}% | Actual volume: {pygame.mixer.music.get_volume()}")
+                        print(f"Volume decreased: {self.volume}%")
                         self.options[0] = f"Music: {self.volume}%"
+                        write_to_JSON("Volume", self.volume)
+                        DEFAULTVOLUME = self.volume
+
 
     def select_option(self):
         """Execute the selected option."""
@@ -434,6 +484,8 @@ class OptionsState(GameState):
             color = "white" if i == self.current_option else "gray"
             text = font.render(option, True, color)
             screen.blit(text, (SCREEN_WIDTH // 5, SCREEN_HEIGHT // 3 + i * 100))
+
+
 
 
 # Game Manager
