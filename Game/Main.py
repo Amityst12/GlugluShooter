@@ -1,19 +1,27 @@
 import pygame
 import time
 import random
-import os
 import json
+import PIL as pillow
+from PIL import Image
 from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED, SPAWNRATE, HEALTH
 
+print("-----------------------------------------------------")
 # Open JSON
 with open("Game/Changes.json") as file:
     config = json.load(file)
     DEFAULTVOLUME = config["Volume"]
     HIGHSCORE = config["HIGHSCORE"]
-
 print(config)
-    
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1" 
+
+# FIX picture
+def fix_png(file_path):
+    """Re-save the PNG file without any color profile."""
+    img = Image.open(file_path)
+    img.info.pop('icc_profile', None)  # Remove the ICC profile if it exists
+    img.save(file_path)  # Overwrite the file
+fix_png("Assets/Sprites/Bubble.png")    
+
 
 # Makes animation
 def load_frames(spritesheet, frame_width, frame_height, num_frames, flip =0):
@@ -36,6 +44,7 @@ def write_to_JSON(Catagory, Value):
     json.dump(config, out_file, indent= 6)
     print(f"New json: {config}")
 
+
 # Base class for all game states
 class GameState:
     def __init__(self, manager):
@@ -53,7 +62,7 @@ class GameState:
         """Render the state to the screen."""
         pass
 
-#Enemy class
+# Enemy class
 class Enemy:
     def __init__(self, x, y, speed, frames):
         self.x = x
@@ -106,6 +115,38 @@ class Enemy:
             2  # Line width (set to 0 for filled circle if needed)
         )""" #debug
 
+# PowerUp class
+class PowerUp:
+    def __init__(self, x ,y ,type_):
+        self.pos = pygame.Vector2(x,y)
+        self.type = type_
+        self.radius = 20 #Size for collision
+        self.color_map = {1: "Shield.png", 2: "Acceleration.png" , 3 :"Coin.png" ,4 : "Heart.png"}
+        self.active = True
+        self.Powerup_sprite = pygame.image.load("Assets/Sprites/"+self.color_map[self.type])
+        self.Powerup_sprite = pygame.transform.scale(self.Powerup_sprite, (40,40))
+        
+    def update(self, dt):
+        """Floating animation for power up"""
+        self.pos.y += 100 * dt  # Move power-up down at 100 pixels/second
+        if self.pos.y > SCREEN_HEIGHT:  # Remove if it moves out of bounds
+            self.active = False
+        
+    def render(self,screen):
+        if self.active:
+            screen.blit(self.Powerup_sprite,(int(self.pos.x)-20, int(self.pos.y)-20))
+        """pygame.draw.circle(
+            screen,  # Surface to draw on
+            "red",   # Hitbox color (use transparent color if distracting)
+            (self.pos.x, self.pos.y),  # Center of the circle
+            self.radius,  # Radius of the hitbox
+            2  # Line width (set to 0 for filled circle if needed)
+        )""" # Drawing for debug
+     
+    def collides_with(self,player_pos, player_radius):
+        Fixedpos = pygame.Vector2(player_pos.x +40, player_pos.y +40)
+        return self.pos.distance_to(Fixedpos) < self.radius+ player_radius    
+            
 
 
 
@@ -122,20 +163,24 @@ class GameplayState(GameState):
         self.score = 0
         self.clockActive = False
         
-        #Sprites
+        # Sprites
         self.hero = pygame.image.load("Assets/Sprites/Hero.png")
         self.hero = pygame.transform.scale(self.hero, (90,90))
         self.hero_right = pygame.transform.flip(self.hero,True,False)
         self.facing_right = False
         self.bubble = pygame.image.load("Assets/Sprites/Bubble.png")
         self.bubble = pygame.transform.scale(self.bubble, (30,30))
+        self.shield = pygame.image.load("Assets/Sprites/Bubble_1.png")
+        self.shield = pygame.transform.scale(self.shield, (125,125))
+        self.shield.set_alpha(80)
         
-        self.background = pygame.image.load("Assets/Sprites/UnderwaterBackground.png")
+        self.chosen_background = "Assets/Sprites/"+ str(random.randint(1,3)) +"_game_background.png"
+        self.background = pygame.image.load(self.chosen_background)
         self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
         # Enemies
         self.enemies = []
-        self.spawn_rate = SPAWNRATE
+        self.spawn_rate = 0
         self.spawn_timer = 0
         self.flip = 0
         
@@ -147,6 +192,14 @@ class GameplayState(GameState):
         self.shark_frames2 = load_frames(self.shark_spritesheet, frame_width=152, frame_height=128 , num_frames=4)
         self.shark_frames2_rev = load_frames(self.shark_spritesheet, frame_width=152, frame_height=128 , num_frames=4, flip = 1)
         
+        # Power ups
+        self.power_ups = []
+        self.power_up_spawn_timer = 0
+        self.power_up_spawn_rate = 13 # Spawn a power up once in X seconds
+        
+        self.shield_timer = 0
+        self.bullet_speed_timer = 0
+        self.bullet_speed_multiplier = 1  # Default bullet speed multiplier
         
         # Glu sounds
         self.glues = {
@@ -169,8 +222,13 @@ class GameplayState(GameState):
         self.player_pos = pygame.Vector2(SCREEN_WIDTH/2 , SCREEN_HEIGHT/2)
         self.enemies = []
         self.bullets = []
-        self.spawn_rate = SPAWNRATE
+        self.power_ups = []
+        self.power_up_spawn_timer = 0
+        self.spawn_rate = 0
         self.spawn_timer = 0
+        self.chosen_background = "Assets/Sprites/"+ str(random.randint(1,3)) +"_game_background.png"
+        self.background = pygame.image.load(self.chosen_background)
+        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
         
     def get_score(self):
         return self.score
@@ -237,7 +295,7 @@ class GameplayState(GameState):
             
         # Update bullets, update score on hit
         for bullet in self.bullets[:]: 
-            bullet["pos"] += bullet["dir"] * 1200 * dt #Move bullet 1200px/sec
+            bullet["pos"] += bullet["dir"] * 1200 * self.bullet_speed_multiplier * dt #Move bullet 1200px/sec
             rem = 0
             
             if(bullet["pos"].x < 0 or bullet["pos"].x > SCREEN_WIDTH or #X
@@ -255,7 +313,7 @@ class GameplayState(GameState):
             
         
         # Spawn enemies
-        self.spawn_rate = max(270, 2000 - int(self.score // 10) * 15)
+        self.spawn_rate = max(270, 2200 - int(self.score // 10) * SPAWNRATE) #MORE SPAWNRATE MAKES THE GAME HARDER
         self.spawn_timer += dt * 1000
         if self.spawn_timer >= self.spawn_rate:
             self.spawn_timer -= self.spawn_rate
@@ -273,6 +331,8 @@ class GameplayState(GameState):
                 else: self.flip = 1 
                 
             speed = random.randint(120, 170) + int(self.score // 35)
+            if self.bullet_speed_timer > 0:
+                speed = speed/2
             if random.randint(0,1):
                 if self.flip == 0: self.enemies.append(Enemy(x, y, speed, self.shark_frames2))
                 else :
@@ -283,12 +343,57 @@ class GameplayState(GameState):
                     self.enemies.append(Enemy(x, y, speed, self.shark_frames_rev))
             print(f"Enemy spawned at {x} , {y} , speed: {speed}")
             
+         
+        # Power-up spawn logic
+        self.power_up_spawn_timer += dt
+        if self.power_up_spawn_timer >= self.power_up_spawn_rate:
+            self.power_up_spawn_timer = 0
+            x = random.randint(50, SCREEN_WIDTH - 50)
+            y = -30  # Spawn slightly above the screen
+            if self.health == HEALTH :
+                power_type = random.randint(1, 3)  # Randomize type - wont spawn health if full HP
+            else: power_type = random.randint(1, 4)
+            self.power_ups.append(PowerUp(x, y, power_type))
+            print(f"Drawing Power-Up: Type= {power_type}")
+            
+        # Shield effect
+        if self.shield_timer > 0:
+            self.shield_timer -= dt
+            if self.shield_timer <= 0:
+                self.shield_timer = 0
+                print("Shield expired!")
+
+        # Acceleration
+        if self.bullet_speed_timer > 0:
+            self.bullet_speed_timer -= dt
+            if self.bullet_speed_timer <= 0:
+                self.bullet_speed_multiplier = 1  # Reset bullet speed
+                self.speed = SPEED # Reset speed
+                print("Bullet speed boost expired!")
+
+        
+        # Check for power-up collisions
+        for power_up in self.power_ups[:]:
+            power_up.update(dt)
+            if power_up.collides_with(self.player_pos, self.player_radius):
+                print(f"Collected Power-Up: {power_up.type}")
+                if power_up.type == 1:  # Shield
+                    self.shield_timer = 5  # Shield lasts for 5 seconds
+                elif power_up.type == 2:  # Bullet Speed
+                    self.bullet_speed_timer = 7  # Faster bullets for 7 seconds
+                    self.bullet_speed_multiplier = 1.8
+                    self.speed = SPEED + 150 # Faster movement
+                elif power_up.type == 3:  # Bonus coins 
+                    self.score += random.randint(300,500)
+                elif power_up.type == 4:  # Health Up
+                    self.health = min(self.health + 1, HEALTH)  # Max health is 3
+                self.power_ups.remove(power_up)
                 
         # Move enemies
         for enemy in self.enemies:
             enemy.move_towards(self.player_pos, dt)
             enemy.update(dt)
-            if enemy.collides_with((self.player_pos.x+40,self.player_pos.y+40), self.player_radius -5):
+            if enemy.collides_with((self.player_pos.x+40,self.player_pos.y+40), self.player_radius -5) and self.shield_timer == 0:
                 print(f"Enemy hit the player HP: {self.health -1}")
                 self.health -=1
                 self.enemies.remove(enemy)
@@ -299,11 +404,11 @@ class GameplayState(GameState):
         screen.blit(self.hero,(self.player_pos))
         
         # Display score
-        font = pygame.font.Font(None, 74)
+        font = pygame.font.Font("Assets/Font/soupofjustice.ttf", 74)
         text = font.render(f"Score: {int(self.score)}", True, "white")
         screen.blit(text, (SCREEN_WIDTH // 2.5, SCREEN_HEIGHT // 12.9))
         
-        # Flip hero sprite
+        # Draw & Flip hero sprite
         if self.facing_right == False:
             self.hero_right.set_alpha(0)
             self.hero.set_alpha(255)
@@ -312,6 +417,10 @@ class GameplayState(GameState):
             self.hero_right.set_alpha(255)
             self.hero.set_alpha(0)
             screen.blit(self.hero_right, self.player_pos)
+            
+        #Draw shield
+        if self.shield_timer > 0:
+            screen.blit(self.shield,(self.player_pos.x - 20, self.player_pos.y - 20))
         
         #Display HP
         health_text = font.render(f"Health: {self.health}", True,"red")
@@ -324,6 +433,10 @@ class GameplayState(GameState):
         # Draw bullets
         for bullet in self.bullets:
             screen.blit(self.bubble , bullet["pos"])
+            
+        # Draw power-ups
+        for power_up in self.power_ups:
+            power_up.render(screen)
 
 
 # Game over State        
@@ -331,6 +444,8 @@ class GameoverState(GameState):
     def __init__(self, manager):
         super().__init__(manager)
         self.finalScore =0
+        self.background = pygame.image.load("Assets/Sprites/MainBackground.png")
+        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
         
     def handle_events(self):
         """Handle gameplay-specific events."""
@@ -342,23 +457,23 @@ class GameoverState(GameState):
     
     def render(self, screen):
         """Render pause screen."""
-        screen.fill("gray")
-        font = pygame.font.Font(None, 150)
+        screen.blit(self.background, (0,0))
+        font = pygame.font.Font("Assets/Font/soupofjustice.ttf", 150)
         HIGHSCORE = config["HIGHSCORE"]
         if (HIGHSCORE < self.finalScore): 
             write_to_JSON("HIGHSCORE", self.finalScore)
         if (HIGHSCORE <= self.finalScore):
             text = font.render("NEW HIGH SCORE!!",True,"red")
-            screen.blit(text, (SCREEN_WIDTH // 6.7, SCREEN_HEIGHT // 40))
+            screen.blit(text, ((SCREEN_WIDTH // 6.7)-100, SCREEN_HEIGHT // 40))
         text = font.render("Game over!", True, "black")
-        screen.blit(text, (SCREEN_WIDTH // 3.5, SCREEN_HEIGHT // 5.7))
+        screen.blit(text, ((SCREEN_WIDTH // 4)-50, SCREEN_HEIGHT // 5.7))
         text = font.render(f"Your score: {self.finalScore}",True, "black")
-        screen.blit(text, (SCREEN_WIDTH // 4.8, SCREEN_HEIGHT // 3.2))
+        screen.blit(text, ((SCREEN_WIDTH // 9) -20, SCREEN_HEIGHT // 3.2))
         text = font.render(f"Highscore: {HIGHSCORE}",True,"black")
-        screen.blit(text, (SCREEN_WIDTH // 4.8, SCREEN_HEIGHT // 2))
-        font = pygame.font.Font(None, 70)
-        text = font.render("Press B to go back to menu", True ,"white")
-        screen.blit(text, (SCREEN_WIDTH // 4, SCREEN_HEIGHT // 1.2))
+        screen.blit(text, ((SCREEN_WIDTH // 9) -20, SCREEN_HEIGHT // 2))
+        font = pygame.font.Font("Assets/Font/soupofjustice.ttf", 70)
+        text = font.render("Press B to go back to menu", True ,"black")
+        screen.blit(text, ((SCREEN_WIDTH // 4)-100, SCREEN_HEIGHT // 1.2))
         
 
 # Pause State
@@ -375,12 +490,14 @@ class PauseState(GameState):
 
     def render(self, screen):
         """Render pause screen."""
-        screen.fill("gray")
-        font = pygame.font.Font(None, 74)
+        self.background = pygame.image.load("Assets/Sprites/MainBackground.png")
+        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        screen.blit(self.background, (0,0))
+        font = pygame.font.Font("Assets/Font/soupofjustice.ttf", 74)
         text = font.render("Paused - Press ESC to Resume", True, "white")
-        screen.blit(text, (SCREEN_WIDTH // 5.5, SCREEN_HEIGHT // 2.4))
+        screen.blit(text, ((SCREEN_WIDTH // 5.5)-50, SCREEN_HEIGHT // 2.4))
         text = font.render("Press B to go back to menu", True ,"white")
-        screen.blit(text, (SCREEN_WIDTH // 5.5, SCREEN_HEIGHT // 1.9))
+        screen.blit(text, ((SCREEN_WIDTH // 5.5)-50, SCREEN_HEIGHT // 1.9))
 
 
 # Menu State
@@ -389,6 +506,8 @@ class MenuState(GameState):
         super().__init__(manager)
         self.options = ["Start Game", "Options", "Quit"]
         self.current_option = 0
+        self.background = pygame.image.load("Assets/Sprites/MainBackground.png")
+        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -408,12 +527,12 @@ class MenuState(GameState):
                         self.manager.running = False
 
     def render(self, screen):
-        screen.fill("blue")
-        font = pygame.font.Font(None, 74)
+        screen.blit(self.background, (0,0))
+        font = pygame.font.Font("Assets/Font/soupofjustice.ttf", 74)
         for i, option in enumerate(self.options):
             color = "white" if i == self.current_option else "gray"
             text = font.render(option, True, color)
-            screen.blit(text, (SCREEN_WIDTH // 4, SCREEN_HEIGHT // 3 + i * 100))
+            screen.blit(text, (SCREEN_WIDTH // 4, SCREEN_HEIGHT // 4 + i * 100))
 
 
 # Options State
@@ -424,6 +543,8 @@ class OptionsState(GameState):
         self.current_option = 0
         self.volume = DEFAULTVOLUME  # Starting volume
         self.fullscreen = False
+        self.background = pygame.image.load("Assets/Sprites/MainBackground.png")
+        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
     def handle_events(self):
         """Handle input for the options menu."""
@@ -478,12 +599,12 @@ class OptionsState(GameState):
 
     def render(self, screen):
         """Render the options menu."""
-        screen.fill("purple")
-        font = pygame.font.Font(None, 74)
+        screen.blit(self.background, (0,0))
+        font = pygame.font.Font("Assets/Font/soupofjustice.ttf", 74)
         for i, option in enumerate(self.options):
             color = "white" if i == self.current_option else "gray"
             text = font.render(option, True, color)
-            screen.blit(text, (SCREEN_WIDTH // 5, SCREEN_HEIGHT // 3 + i * 100))
+            screen.blit(text, (SCREEN_WIDTH // 4, SCREEN_HEIGHT // 4 + i * 100))
 
 
 
@@ -529,7 +650,7 @@ class GameManager:
         }
         
         self.current_state = self.states["menu"]
-
+        print("-----------------------------------------------------")
     def fade_to_black(self, duration):
         """perform a fade-to-black transition"""
         fade_time = 0

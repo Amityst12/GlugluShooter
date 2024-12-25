@@ -2,10 +2,7 @@
 
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
-BACKGROUND_COLOR = "pink"
-BACKGROUND_PICTURE = "/Assets/Sprites/UnderwaterBackground.png"
 SPEED = 300
 FPS = 120
 HEALTH = 3
-SPAWNRATE = 10 #Less = Hard
-DEFAULTVOLUME = 20
+SPAWNRATE = 15 # More = Harder
