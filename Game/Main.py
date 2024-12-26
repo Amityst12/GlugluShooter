@@ -2,7 +2,6 @@ import pygame
 import time
 import random
 import json
-import PIL as pillow
 from PIL import Image
 from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED, SPAWNRATE, HEALTH
 
@@ -14,7 +13,7 @@ with open("Game/Changes.json") as file:
     HIGHSCORE = config["HIGHSCORE"]
 print(config)
 
-# FIX picture
+# FIX picture sRGB
 def fix_png(file_path):
     """Re-save the PNG file without any color profile."""
     img = Image.open(file_path)
@@ -76,6 +75,7 @@ class Enemy:
         self.image_width = 124  # Match your frame width
         self.image_height = 128
         self.radius = self.image_height // 2
+        
 
     def update(self, dt):
         """Update enemy logic, including animation."""
@@ -84,6 +84,7 @@ class Enemy:
         if self.animation_timer >= self.animation_speed:
             self.animation_timer = 0
             self.current_frame = (self.current_frame + 1) % len(self.frames)
+
 
     def collides_with(self, bullet_pos, bullet_radius=5):
         """Check if a bullet collides with the enemy using circular hit detection."""
@@ -195,7 +196,7 @@ class GameplayState(GameState):
         # Power ups
         self.power_ups = []
         self.power_up_spawn_timer = 0
-        self.power_up_spawn_rate = 13 # Spawn a power up once in X seconds
+        self.power_up_spawn_rate = 2 # Spawn a power up once in X seconds
         
         self.shield_timer = 0
         self.bullet_speed_timer = 0
@@ -379,14 +380,30 @@ class GameplayState(GameState):
                 print(f"Collected Power-Up: {power_up.type}")
                 if power_up.type == 1:  # Shield
                     self.shield_timer = 5  # Shield lasts for 5 seconds
+                    sound = pygame.mixer.Sound("Assets/Music/Shield.mp3")
+                    sound.set_volume(0.20)
+                    sound.play()
+                    
                 elif power_up.type == 2:  # Bullet Speed
                     self.bullet_speed_timer = 7  # Faster bullets for 7 seconds
                     self.bullet_speed_multiplier = 1.8
                     self.speed = SPEED + 150 # Faster movement
+                    sound = pygame.mixer.Sound("Assets/Music/Boost.mp3")
+                    sound.set_volume(0.30)
+                    sound.play()                    
+                    
                 elif power_up.type == 3:  # Bonus coins 
                     self.score += random.randint(300,500)
+                    sound = pygame.mixer.Sound("Assets/Music/Bonus.mp3")
+                    sound.set_volume(0.20)
+                    sound.play()
+                    
                 elif power_up.type == 4:  # Health Up
                     self.health = min(self.health + 1, HEALTH)  # Max health is 3
+                    sound = pygame.mixer.Sound("Assets/Music/Health.mp3")
+                    sound.set_volume(0.40)
+                    sound.play()
+                    
                 self.power_ups.remove(power_up)
                 
         # Move enemies
@@ -394,6 +411,9 @@ class GameplayState(GameState):
             enemy.move_towards(self.player_pos, dt)
             enemy.update(dt)
             if enemy.collides_with((self.player_pos.x+40,self.player_pos.y+40), self.player_radius -5) and self.shield_timer == 0:
+                sound = pygame.mixer.Sound("Assets/Music/Hit.mp3")
+                sound.set_volume(0.30)
+                sound.play()
                 print(f"Enemy hit the player HP: {self.health -1}")
                 self.health -=1
                 self.enemies.remove(enemy)
