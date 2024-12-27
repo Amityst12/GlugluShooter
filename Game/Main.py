@@ -2,7 +2,6 @@ import pygame
 import time
 import random
 import json
-from PIL import Image
 from game_config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS ,SPEED, SPAWNRATE, HEALTH
 
 print("-----------------------------------------------------")
@@ -12,14 +11,6 @@ with open("Game/Changes.json") as file:
     DEFAULTVOLUME = config["Volume"]
     HIGHSCORE = config["HIGHSCORE"]
 print(config)
-
-# FIX picture sRGB
-def fix_png(file_path):
-    """Re-save the PNG file without any color profile."""
-    img = Image.open(file_path)
-    img.info.pop('icc_profile', None)  # Remove the ICC profile if it exists
-    img.save(file_path)  # Overwrite the file
-fix_png("Assets/Sprites/Bubble.png")    
 
 
 # Makes animation
@@ -196,7 +187,7 @@ class GameplayState(GameState):
         # Power ups
         self.power_ups = []
         self.power_up_spawn_timer = 0
-        self.power_up_spawn_rate = 2 # Spawn a power up once in X seconds
+        self.power_up_spawn_rate = 14 # Spawn a power up once in X seconds
         
         self.shield_timer = 0
         self.bullet_speed_timer = 0
@@ -292,7 +283,7 @@ class GameplayState(GameState):
         
         # Updating score ON TIME
         if self.clockActive:
-            self.score += dt*4
+            self.score += dt*5
             
         # Update bullets, update score on hit
         for bullet in self.bullets[:]: 
